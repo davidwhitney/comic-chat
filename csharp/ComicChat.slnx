@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ComicChat.App/ComicChat.App.csproj" />
+    <Project Path="src/ComicChat.Core/ComicChat.Core.csproj" />
+    <Project Path="src/ComicChat.Irc/ComicChat.Irc.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ComicChat.Tests/ComicChat.Tests.csproj" />
+  </Folder>
+</Solution>

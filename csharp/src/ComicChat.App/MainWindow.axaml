@@ -1,0 +1,80 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:r="using:ComicChat.App.Rendering"
+        x:Class="ComicChat.App.MainWindow"
+        Title="Microsoft Comic Chat"
+        Width="1100" Height="760"
+        Background="#F0F0F0">
+
+  <DockPanel>
+
+    <!-- Connection bar -->
+    <Border DockPanel.Dock="Top" Background="#E4E4E4" Padding="6"
+            BorderBrush="#C0C0C0" BorderThickness="0,0,0,1">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock Text="Server:" VerticalAlignment="Center"/>
+        <TextBox x:Name="ServerBox" Width="170" Text="irc.libera.chat"/>
+        <TextBlock Text="Port:" VerticalAlignment="Center"/>
+        <TextBox x:Name="PortBox" Width="55" Text="6667"/>
+        <TextBlock Text="Nick:" VerticalAlignment="Center"/>
+        <TextBox x:Name="NickBox" Width="110" Text="comicfan"/>
+        <TextBlock Text="Room:" VerticalAlignment="Center"/>
+        <TextBox x:Name="RoomBox" Width="120" Text="#comicchat"/>
+        <Button x:Name="ConnectButton" Content="Connect" Click="OnConnectClick"/>
+        <Border Width="1" Background="#C0C0C0" Margin="4,2"/>
+        <Button Content="Open…" Click="OnOpenClick" ToolTip.Tip="Open a saved comic (.ccc)"/>
+        <Button Content="Save…" Click="OnSaveClick" ToolTip.Tip="Save this comic (.ccc)"/>
+        <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="10,0,0,0"
+                   Text="Offline" Foreground="#666"/>
+      </StackPanel>
+    </Border>
+
+    <!-- Say bar -->
+    <Border DockPanel.Dock="Bottom" Background="#E4E4E4" Padding="6"
+            BorderBrush="#C0C0C0" BorderThickness="0,1,0,0">
+      <DockPanel>
+        <ComboBox x:Name="ModeBox" DockPanel.Dock="Left" Width="90" SelectedIndex="0" Margin="0,0,6,0">
+          <ComboBoxItem Content="Say"/>
+          <ComboBoxItem Content="Think"/>
+          <ComboBoxItem Content="Whisper"/>
+          <ComboBoxItem Content="Action"/>
+        </ComboBox>
+        <Button x:Name="SayButton" DockPanel.Dock="Right" Content="Say" Width="70"
+                Margin="6,0,0,0" Click="OnSayClick"/>
+        <TextBox x:Name="SayBox" PlaceholderText="Type here — the comic writes itself..."
+                 KeyDown="OnSayKeyDown"/>
+      </DockPanel>
+    </Border>
+
+    <!-- Right panel: emotion wheel, character, backdrop, members -->
+    <Border DockPanel.Dock="Right" Width="230" Background="#E4E4E4"
+            BorderBrush="#C0C0C0" BorderThickness="1,0,0,0" Padding="8">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="Expression" FontWeight="Bold" Margin="0,0,0,4"/>
+        <r:EmotionWheel x:Name="Wheel" DockPanel.Dock="Top" Height="210"/>
+        <TextBlock DockPanel.Dock="Top" x:Name="PoseText" Text="Neutral (auto)"
+                   HorizontalAlignment="Center" Margin="0,2,0,8" Foreground="#666"/>
+        <Button DockPanel.Dock="Top" Content="Unfreeze (auto-pose)" Click="OnUnfreezeClick"
+                HorizontalAlignment="Stretch" Margin="0,0,0,8"/>
+
+        <TextBlock DockPanel.Dock="Top" Text="Character" FontWeight="Bold" Margin="0,0,0,4"/>
+        <ComboBox DockPanel.Dock="Top" x:Name="AvatarBox" HorizontalAlignment="Stretch"
+                  Margin="0,0,0,8" SelectionChanged="OnAvatarChanged"/>
+
+        <TextBlock DockPanel.Dock="Top" Text="Backdrop" FontWeight="Bold" Margin="0,0,0,4"/>
+        <ComboBox DockPanel.Dock="Top" x:Name="BackdropBox" HorizontalAlignment="Stretch"
+                  Margin="0,0,0,8" SelectionChanged="OnBackdropChanged"/>
+
+        <TextBlock DockPanel.Dock="Top" Text="Members" FontWeight="Bold" Margin="0,0,0,4"/>
+        <ListBox x:Name="MemberList"/>
+      </DockPanel>
+    </Border>
+
+    <!-- The comic -->
+    <ScrollViewer x:Name="ComicScroll" HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto" Background="White">
+      <r:ComicPageView x:Name="PageView"/>
+    </ScrollViewer>
+
+  </DockPanel>
+</Window>
