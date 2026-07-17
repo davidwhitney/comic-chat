@@ -16,7 +16,7 @@ Needs the .NET 10 SDK. From this directory:
 
 ```bash
 dotnet build
-dotnet test                                    # 439 tests
+dotnet test                                    # 445 tests
 dotnet run --project src/ComicChat.App          # the app
 dotnet run --project src/ComicChat.App -- --render out.png        # headless: script → comic PNG
 dotnet run --project src/ComicChat.App -- --verify-history out/   # replay + .ccc round-trip check
@@ -31,7 +31,7 @@ The art is read straight from `../v2.5-beta-1/comicart` and `../v2.5-beta-1/artp
 | `ComicChat.Core` | The engine. No UI dependency at all — it renders headless. |
 | `ComicChat.Irc` | IRC client and the Comic Chat wire protocol. |
 | `ComicChat.App` | Avalonia UI (cross-platform; developed on macOS). |
-| `ComicChat.Tests` | 409 xUnit tests, including tests against the real art files. |
+| `ComicChat.Tests` | 445 xUnit tests, including tests against the real art files. |
 
 ### Core
 
@@ -56,6 +56,12 @@ Five subsystems, mirroring the original:
 2. **Pose resolution** (`avatar.cpp`) — a priority-ordered constraint fill over independent face
    and torso slots. This is why *"I'm laughing LOL"* gives you a **laughing head on a pointing
    body**: `LAUGH` (priority 11) takes the face, and `POINTSELF` (7) still takes the torso.
+
+   An avatar carries a *current body* between lines (`m_body`), and freezing is what preserves it.
+   Dragging the emotion wheel applies a pose and **temporarily** freezes the avatar, so the expert
+   system stands down for the next line only (`textpose.cpp:125`); `ResetAvatar` (`avatar.cpp:454`)
+   then expires the freeze and returns to neutral, so auto-posing resumes. The "Hold pose" toggle
+   is a *permanent* freeze that keeps the pose until you turn it off.
 
 3. **Layout** (`panel.cpp`) — a greedy merge-else-split loop, where the panel is the unit of
    backtracking. Panel count is emergent, not computed. `EvalPair` scores staging (talking to

@@ -64,6 +64,50 @@ public sealed class AvatarPoseResolver
     /// </summary>
     public int LastTorso { get; private set; } = -1;
 
+    private ResolvedBody? _currentBody;
+
+    /// <summary>
+    /// The pose this avatar is currently holding. Port of CAvatarX::m_body (avatar.h).
+    /// </summary>
+    /// <remarks>
+    /// The avatar carries a pose between lines; it is not recomputed from scratch each time.
+    /// That is what makes freezing meaningful: <see cref="TextPose.ChatPreSendText"/> bails when
+    /// frozen and the body simply <i>stays as it is</i> — which is the pose the user picked on the
+    /// wheel. Without this, "frozen" would have nothing to preserve.
+    /// </remarks>
+    public ResolvedBody CurrentBody => _currentBody ??= GetNeutralBody();
+
+    /// <summary>
+    /// Adopt a pose. Port of CAvatarX::UpdateBody (avatar.cpp).
+    /// </summary>
+    /// <remarks>
+    /// Deliberately does not call <see cref="RecordBody"/>: that advances the round-robin
+    /// anti-repeat cursor, and the original only advances it when a panel is actually laid out
+    /// (panel.cpp:619) — not on every keystroke or wheel drag.
+    /// </remarks>
+    public void UpdateBody(ResolvedBody body) => _currentBody = body;
+
+    /// <summary>Drop to the neutral pose. Port of CAvatarComplex::SetNeutral (avatar.cpp:463).</summary>
+    public void SetNeutral() => _currentBody = GetNeutralBody();
+
+    /// <summary>
+    /// Called after each panel is laid out. Port of the global ResetAvatar (avatar.cpp:454).
+    /// </summary>
+    /// <remarks>
+    /// This is what makes a wheel-picked pose last exactly one line: a temporary freeze expires
+    /// here, and any avatar that is not explicitly frozen returns to neutral, ready for the next
+    /// utterance to pose it afresh. An avatar the user has pinned with the freeze toggle
+    /// (<see cref="AvatarFreezeState.Frozen"/>) survives both steps and holds its pose.
+    /// </remarks>
+    public void ResetAvatar()
+    {
+        if (Freeze == AvatarFreezeState.TempFrozen)
+            Freeze = AvatarFreezeState.Unfrozen;
+
+        if (Freeze == AvatarFreezeState.Unfrozen)
+            SetNeutral();
+    }
+
     private IReadOnlyList<IPoseRecord> Faces => _table.Faces;
     private IReadOnlyList<IPoseRecord> Torsos => _table.Torsos;
 

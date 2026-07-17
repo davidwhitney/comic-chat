@@ -66,6 +66,14 @@ public sealed class ComicSession : IChatDocument
         if (_artPool.Count == 0)
             throw new ArgumentException("Need at least one avatar to run a comic.", nameof(artPool));
 
+        // After each panel, expire temporary freezes and return unfrozen avatars to neutral —
+        // the original's ResetAvatar (panel.cpp:1127 → avatar.cpp:454). This is what makes a
+        // wheel-picked pose last exactly one line.
+        _directory.ResetHandler = id =>
+        {
+            if (_participants.TryGetValue(id, out var p)) p.Resolver.ResetAvatar();
+        };
+
         Page = NewPage();
         History = new ChatHistory(this);
     }
@@ -254,13 +262,13 @@ public sealed class ComicSession : IChatDocument
             if (ByNick(t) is { } target)
                 state.TalkTos.Add(target.Id);
 
-        ResolvedBody resolved;
         if (pose.Cooked && pose.HasPose)
         {
+            // The sender already decided; honour it verbatim.
             if ((p.Avatar.Flags & AvatarFlags.OtherMapped) == 0 && pose.ExpressionIndex >= 0)
             {
                 // Raw art indices are meaningful on this exact character (histent.cpp:95).
-                resolved = new ResolvedBody(pose.ExpressionIndex, pose.GestureIndex);
+                p.Resolver.UpdateBody(new ResolvedBody(pose.ExpressionIndex, pose.GestureIndex));
             }
             else
             {
@@ -273,13 +281,18 @@ public sealed class ComicSession : IChatDocument
                 var opts = new EmotionOpts();
                 opts.Add(expr.EmotionValue, expr.Intensity, 10);
                 opts.Add(gest.EmotionValue, gest.Intensity, 9);
-                resolved = p.Resolver.GetBodyFromEmotion(opts);
+                p.Resolver.UpdateBody(p.Resolver.GetBodyFromEmotion(opts));
             }
         }
-        else
+        else if (_textPose.ChatPreSendText(text, p.Resolver) is { } inferred)
         {
-            resolved = _textPose.ChatPreSendText(text, p.Resolver) ?? p.Resolver.GetNeutralBody();
+            // Unfrozen: the expert system reads the words and poses the avatar.
+            p.Resolver.UpdateBody(inferred);
         }
+        // Otherwise the avatar is frozen and keeps the pose the user picked on the wheel —
+        // ChatPreSendText declined to vote (textpose.cpp:125), so the body simply stands.
+
+        var resolved = p.Resolver.CurrentBody;
 
         Page.BodyFactory = id =>
         {

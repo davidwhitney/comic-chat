@@ -52,6 +52,16 @@ public sealed class AvatarDirectory : IAvatarDirectory
 {
     private readonly Dictionary<uint, AvatarLayoutState> _states = [];
 
+    /// <summary>
+    /// Invoked by <see cref="ResetAvatar"/> once a panel has been laid out.
+    /// </summary>
+    /// <remarks>
+    /// The layout engine knows <i>when</i> to reset an avatar but not <i>how</i> — the pose state
+    /// lives in the Avatars layer, which Comic must not depend on. The owner supplies the action;
+    /// see AvatarPoseResolver.ResetAvatar for what the original did (avatar.cpp:454).
+    /// </remarks>
+    public Action<uint>? ResetHandler { get; set; }
+
     public AvatarLayoutState GetOrAdd(uint id, Func<Emotion, Body?>? bodyFactory = null)
     {
         if (_states.TryGetValue(id, out var s)) return s;
@@ -62,7 +72,7 @@ public sealed class AvatarDirectory : IAvatarDirectory
 
     public AvatarLayoutState? Get(uint avatarId) => _states.GetValueOrDefault(avatarId);
 
-    public void ResetAvatar(uint avatarId) { }
+    public void ResetAvatar(uint avatarId) => ResetHandler?.Invoke(avatarId);
 
     /// <summary>
     /// Clear every avatar's staging hysteresis, keeping the avatars themselves.

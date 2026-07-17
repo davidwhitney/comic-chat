@@ -1,7 +1,10 @@
 using Avalonia;
 using Avalonia.Media.Imaging;
 using ComicChat.App.Rendering;
+using ComicChat.Core.Art;
+using ComicChat.Core.Avatars;
 using ComicChat.Core.Comic;
+using ComicChat.Core.Semantics;
 
 namespace ComicChat.App;
 
@@ -130,7 +133,110 @@ public static class ComicRenderer
 
         RenderSession(session, bitmaps, backdrops, Path.Combine(outputDir, "resized.png"), 1200);
 
-        Console.WriteLine(failures == 0 ? "\nALL HISTORY CHECKS PASSED" : $"\n{failures} CHECK(S) FAILED");
+        failures += VerifyPoses();
+        RenderWheelDemo(Path.Combine(outputDir, "wheel-pose.png"));
+
+        Console.WriteLine(failures == 0 ? "\nALL CHECKS PASSED" : $"\n{failures} CHECK(S) FAILED");
+        return failures;
+    }
+
+    /// <summary>
+    /// Render one character across three lines to show the wheel/freeze lifecycle: a normal line,
+    /// then a line with an ANGRY pose pinned on the wheel, then a line after the temporary freeze
+    /// has expired (which should auto-pose from the text again).
+    /// </summary>
+    private static void RenderWheelDemo(string outputPath)
+    {
+        var art = ArtLibrary.Load();
+        var measurer = new AvaloniaTextMeasurer();
+        var font = measurer.CreateFontInfo();
+        var metrics = new PageMetrics { BalloonFont = font, WhisperFont = font, ShoutFont = font, TitleFont = font };
+        metrics.SetPanelsWide(3, (int)(1400 * AvaloniaTextMeasurer.TwipsPerDip));
+
+        var session = new ComicSession(new LayoutContext(measurer, metrics), art.Avatars)
+        {
+            BackDropIdByName = name =>
+            {
+                int i = art.Backdrops.FindIndex(b => b.name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                return i < 0 ? (ushort)0 : (ushort)(i + 1);
+            },
+        };
+
+        var bitmaps = new ArtBitmapCache();
+        var backdrops = new BackDropRenderer(bitmaps);
+        for (int i = 0; i < art.Backdrops.Count; i++)
+            backdrops.Register((ushort)(i + 1), art.Backdrops[i].backdrop);
+
+        session.RecordAvatarChange("Bolo", "Bolo");
+        if (art.Backdrops.Count > 0) session.RecordBackDrop(art.Backdrops[0].name);
+
+        var bolo = session.Participants[session.ByNick("Bolo")!.Id].Resolver;
+
+        session.Say("Bolo", "Just a normal hello.");
+
+        // The user drags the wheel to ANGRY before the next line: apply the pose and temp-freeze.
+        bolo.UpdateBody(bolo.GetBodyFromEmotion(new Emotion(1.0, Em.Angry)));
+        bolo.Freeze = AvatarFreezeState.TempFrozen;
+        session.Say("Bolo", "Now I am really annoyed!");
+
+        // The temp freeze has expired; this line auto-poses from its text again.
+        session.Say("Bolo", "But now I have calmed down.");
+
+        RenderSession(session, bitmaps, backdrops, outputPath, 1400);
+        Console.WriteLine($"wrote:     {Path.GetFileName(outputPath)} (wheel-pose lifecycle demo)");
+    }
+
+    /// <summary>
+    /// Confirms auto-detection produces varied poses and a wheel pose reaches the drawn strip.
+    /// </summary>
+    private static int VerifyPoses()
+    {
+        int failures = 0;
+        var art = ArtLibrary.Load();
+
+        // 1. The expert system infers different faces/torsos for different text.
+        var complex = art.Avatars.OfType<AvatarComplex>().FirstOrDefault(a => a.Faces.Count > 4);
+        if (complex is null)
+        {
+            Console.Error.WriteLine("FAIL: no complex avatar with enough faces to test poses.");
+            return failures + 1;
+        }
+
+        var tp = new TextPose();
+        var seen = new HashSet<(int, int)>();
+        foreach (var msg in new[] { "hello there", "LOL so funny", ":(", "I am here", "Are you sure?", "STOP IT" })
+        {
+            var r = new AvatarPoseResolver(complex, complex.PoseStyle);
+            var body = tp.ChatPreSendText(msg, r);
+            if (body is { } b) seen.Add((b.FaceIndex, b.TorsoIndex));
+        }
+        if (seen.Count < 4)
+        {
+            Console.Error.WriteLine($"FAIL: auto-detection produced only {seen.Count} distinct poses across 6 lines.");
+            failures++;
+        }
+        else Console.WriteLine($"ok:        auto-detection gave {seen.Count} distinct poses across 6 lines");
+
+        // 2. A wheel pose survives a temp freeze for one line, then auto-posing resumes.
+        var res = new AvatarPoseResolver(complex, complex.PoseStyle);
+        var pinned = res.GetBodyFromEmotion(new Emotion(1.0, Em.Laugh));
+        res.UpdateBody(pinned);
+        res.Freeze = AvatarFreezeState.TempFrozen;
+
+        bool held = tp.ChatPreSendText("plain words", res) is null
+                    && res.CurrentBody.FaceIndex == pinned.FaceIndex;
+        res.ResetAvatar();
+        bool resumed = res.Freeze == AvatarFreezeState.Unfrozen
+                       && tp.ChatPreSendText("Are you sure?", res) is not null;
+
+        if (held && resumed)
+            Console.WriteLine("ok:        wheel pose holds one line, then auto-posing resumes");
+        else
+        {
+            Console.Error.WriteLine($"FAIL: wheel/freeze lifecycle broken (held={held}, resumed={resumed}).");
+            failures++;
+        }
+
         return failures;
     }
 
@@ -234,8 +340,10 @@ public static class ComicRenderer
         {
             var p = (UnitPanel)session.Page.Panels[i];
             var free = p.GetBalloonRect(session.Ctx);
+            var poses = string.Join(", ", p.Bodies.Select(b =>
+                b is AvatarBody ab ? $"{ab.AvatarId}:f{ab.FaceIndex}/t{ab.TorsoIndex}" : "?"));
             Console.WriteLine($"panel[{i}] bodies={p.Bodies.Count} balloons={p.Elements.Count} " +
-                              $"back={p.BackDrop.BackId} free={free} establishing={p.Establishing}");
+                              $"back={p.BackDrop.BackId} poses=[{poses}] establishing={p.Establishing}");
             foreach (var b in p.Elements)
             {
                 Console.WriteLine($"   balloon w={b.BBox.Width} lines={b.FInfo?.NLines} " +

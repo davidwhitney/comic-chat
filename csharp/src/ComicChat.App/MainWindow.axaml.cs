@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using ComicChat.App.Rendering;
 using ComicChat.Core.Avatars;
 using ComicChat.Core.Comic;
+using ComicChat.Core.Geometry;
 using ComicChat.Core.History;
 using ComicChat.Irc;
 
@@ -203,11 +204,16 @@ public partial class MainWindow : Window
 
         try
         {
+            // Send the pose that was actually drawn. CurrentBody is what the session resolved
+            // for this line — whether from the text or from the wheel — so the peers' comics
+            // match ours. LastFace/LastTorso are the anti-repeat cursor, not the pose.
             var self = _session.Participants[_session.SelfId];
+            var drawn = self.Resolver.CurrentBody;
+
             var ann = Annotations.FromEmotions(
-                gestureIndex: (sbyte)Math.Max(0, self.Resolver.LastTorso),
+                gestureIndex: (sbyte)Math.Max(0, drawn.TorsoIndex),
                 torso: _pinnedEmotion ?? new Emotion(0, Em.Neutral),
-                expressionIndex: (sbyte)Math.Max(0, self.Resolver.LastFace),
+                expressionIndex: (sbyte)Math.Max(0, drawn.FaceIndex),
                 face: _pinnedEmotion ?? new Emotion(0, Em.Neutral),
                 requested: _pinnedEmotion is not null,
                 mode: ToSayMode(mode));
@@ -237,31 +243,78 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Posing by hand freezes the avatar, which makes the expert system stand down
-    /// (textpose.cpp:119) — the user's choice wins until they unfreeze.
+    /// Pose our avatar by hand.
     /// </summary>
+    /// <remarks>
+    /// Two things have to happen together, and missing either makes the wheel do nothing:
+    /// the resolved pose is applied to the avatar's body (UpdateBody), and the avatar is
+    /// temporarily frozen so the expert system stands down for the next line
+    /// (textpose.cpp:125). "Frozen" preserves the body — it does not mean "go neutral".
+    ///
+    /// The freeze is temporary: ResetAvatar expires it once the panel is drawn (avatar.cpp:456),
+    /// so a hand-picked pose applies to exactly the next thing you say and then auto-posing
+    /// resumes. That is the original's behaviour, and the "Freeze" toggle is what makes it stick.
+    /// </remarks>
     private void OnWheelChanged(Emotion emotion)
     {
         if (_session is null) return;
 
         var self = _session.Participants[_session.SelfId];
-        self.Resolver.Freeze = AvatarFreezeState.TempFrozen;
-        _pinnedEmotion = emotion;
-
         var resolved = self.Resolver.GetBodyFromEmotion(emotion);
-        self.Resolver.RecordBody(resolved);
+
+        self.Resolver.UpdateBody(resolved);
+        if (!_holdPose) self.Resolver.Freeze = AvatarFreezeState.TempFrozen;
+        _pinnedEmotion = emotion;
 
         PoseText.Text = emotion.Intensity == 0
             ? "Neutral (pinned)"
-            : $"pinned · intensity {emotion.Intensity:F1}";
+            : $"{DescribeEmotion(emotion)} · {emotion.Intensity:F1}"
+              + (self.Resolver.Style == AvatarPoseStyle.Complex
+                    ? $" · face {resolved.FaceIndex}, torso {resolved.TorsoIndex}"
+                    : $" · body {resolved.TorsoIndex}");
     }
 
+    /// <summary>Name the nearest wheel spoke, so the pose readout means something.</summary>
+    private static string DescribeEmotion(Emotion e)
+    {
+        (float v, string name)[] spokes =
+        [
+            (Em.Happy, "Happy"), (Em.Coy, "Coy"), (Em.Bored, "Bored"), (Em.Scared, "Scared"),
+            (Em.Sad, "Sad"), (Em.Angry, "Angry"), (Em.Shout, "Shout"), (Em.Laugh, "Laugh"),
+        ];
+
+        var best = spokes.MinBy(s => AngleUtil.SubtractAngles(s.v, e.EmotionValue));
+        return best.name;
+    }
+
+    /// <summary>True while the freeze toggle holds the pose across lines (AF_FROZEN).</summary>
+    private bool _holdPose;
+
+    /// <summary>
+    /// Toggle between holding the hand-picked pose and letting the text drive it.
+    /// Port of the freeze toggle (bodycam.cpp:1032).
+    /// </summary>
     private void OnUnfreezeClick(object? sender, RoutedEventArgs e)
     {
         if (_session is null) return;
-        _session.Participants[_session.SelfId].Resolver.Freeze = AvatarFreezeState.Unfrozen;
-        _pinnedEmotion = null;
-        PoseText.Text = "Neutral (auto)";
+
+        var resolver = _session.Participants[_session.SelfId].Resolver;
+        _holdPose = !_holdPose;
+
+        if (_holdPose)
+        {
+            resolver.Freeze = AvatarFreezeState.Frozen;
+            FreezeButton.Content = "Frozen — click to auto-pose";
+            PoseText.Text = "Holding this pose";
+        }
+        else
+        {
+            resolver.Freeze = AvatarFreezeState.Unfrozen;
+            resolver.SetNeutral();
+            _pinnedEmotion = null;
+            FreezeButton.Content = "Hold pose (freeze)";
+            PoseText.Text = "Auto-posing from text";
+        }
     }
 
     /// <summary>

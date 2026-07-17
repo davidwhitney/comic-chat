@@ -52,10 +52,12 @@
       <DockPanel>
         <TextBlock DockPanel.Dock="Top" Text="Expression" FontWeight="Bold" Margin="0,0,0,4"/>
         <r:EmotionWheel x:Name="Wheel" DockPanel.Dock="Top" Height="210"/>
-        <TextBlock DockPanel.Dock="Top" x:Name="PoseText" Text="Neutral (auto)"
-                   HorizontalAlignment="Center" Margin="0,2,0,8" Foreground="#666"/>
-        <Button DockPanel.Dock="Top" Content="Unfreeze (auto-pose)" Click="OnUnfreezeClick"
-                HorizontalAlignment="Stretch" Margin="0,0,0,8"/>
+        <TextBlock DockPanel.Dock="Top" x:Name="PoseText" Text="Auto-posing from text"
+                   HorizontalAlignment="Center" Margin="0,2,0,8" Foreground="#666"
+                   TextWrapping="Wrap" TextAlignment="Center"/>
+        <Button DockPanel.Dock="Top" x:Name="FreezeButton" Content="Hold pose (freeze)"
+                Click="OnUnfreezeClick" HorizontalAlignment="Stretch" Margin="0,0,0,8"
+                ToolTip.Tip="A wheel pose normally lasts one line, then text takes over again. Freeze holds it."/>
 
         <TextBlock DockPanel.Dock="Top" Text="Character" FontWeight="Bold" Margin="0,0,0,4"/>
         <ComboBox DockPanel.Dock="Top" x:Name="AvatarBox" HorizontalAlignment="Stretch"
